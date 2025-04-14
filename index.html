@@ -1,184 +1,199 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="icon.png">
   <title>Timer-5</title>
-  <link rel="icon" href="icon.png" />
   <style>
     body {
       background-color: #121212;
+      color: #ffffff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      transition: background-color 0.5s;
+    }
+
+    input[type="text"] {
+      font-size: 2rem;
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      background-color: #333;
       color: white;
-      font-family: sans-serif;
       text-align: center;
-      padding: 2em;
+      width: 8rem;
     }
-    input {
-      font-size: 2em;
-      width: 6em;
-      text-align: center;
+
+    #display {
+      font-size: 4rem;
+      margin: 1rem;
     }
-    #timeDisplay {
-      font-size: 4em;
-      margin-top: 1em;
+
+    .status {
+      font-size: 2rem;
+      margin-top: 1rem;
     }
-    #arrow {
-      font-size: 2em;
-      margin-right: 0.5em;
-    }
-    .whiteout {
-      background-color: white;
-      color: black;
-    }
+
     button {
-      font-size: 1.2em;
-      margin: 1em;
+      font-size: 1.5rem;
+      margin: 0.5rem;
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: 8px;
+      background-color: #333;
+      color: white;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #555;
     }
   </style>
 </head>
+
 <body>
-  <h1>Timer-5</h1>
+  <input type="text" id="timeInput" placeholder="0907">
+  <div id="display">00:00</div>
+  <div class="status" id="statusMark">⏸️</div>
   <div>
-    <input type="text" id="timeInput" placeholder="0907" />
-    <button onclick="startTimer()">Start</button>
-    <button onclick="togglePause()" id="pauseBtn">Pause</button>
+    <button onclick="start()">スタート</button>
+    <button onclick="togglePause()">一時停止</button>
   </div>
-  <div id="timeDisplay"><span id="statusIcon">⏸</span><span id="arrow">⬇️</span><span id="time">00:00</span></div>
 
   <script>
-    let startTime, endTime, timerInterval;
-    let isRunning = false;
-    let isPaused = false;
-    let pausedAt = 0;
-    let isTimerMode = true;
-    let stopwatchStart, stopwatchElapsed = 0;
-    let wakeLock = null;
+    let startTime, pauseTime, paused = false, mode = 'timer', endTime;
+    let stopwatchStartTime, stopwatchPausedTime;
+    let interval;
 
-    function parseTime(input) {
-      let num = input.replace(/\D/g, "");
-      let sec = 0;
-      if (num.length <= 2) sec = parseInt(num);
-      else if (num.length <= 4) sec = parseInt(num.slice(0, -2)) * 60 + parseInt(num.slice(-2));
-      return sec;
-    }
+    document.addEventListener("DOMContentLoaded", () => {
+      const savedInput = localStorage.getItem("inputTime");
+      const savedState = localStorage.getItem("timerState");
+      const savedStart = localStorage.getItem("startTime");
+      const savedMode = localStorage.getItem("mode");
+      const savedPaused = localStorage.getItem("paused");
+      const savedPauseTime = localStorage.getItem("pauseTime");
 
-    function saveState() {
-      localStorage.setItem("timeInput", document.getElementById("timeInput").value);
-      localStorage.setItem("isRunning", isRunning);
-      localStorage.setItem("isPaused", isPaused);
-      localStorage.setItem("pausedAt", pausedAt);
-      localStorage.setItem("isTimerMode", isTimerMode);
-      localStorage.setItem("startTime", startTime);
-      localStorage.setItem("endTime", endTime);
-      localStorage.setItem("stopwatchStart", stopwatchStart);
-      localStorage.setItem("stopwatchElapsed", stopwatchElapsed);
-    }
+      if (savedInput) document.getElementById("timeInput").value = savedInput;
 
-    function loadState() {
-      document.getElementById("timeInput").value = localStorage.getItem("timeInput") || "";
-      isRunning = localStorage.getItem("isRunning") === "true";
-      isPaused = localStorage.getItem("isPaused") === "true";
-      pausedAt = parseFloat(localStorage.getItem("pausedAt")) || 0;
-      isTimerMode = localStorage.getItem("isTimerMode") !== "false";
-      startTime = parseFloat(localStorage.getItem("startTime")) || 0;
-      endTime = parseFloat(localStorage.getItem("endTime")) || 0;
-      stopwatchStart = parseFloat(localStorage.getItem("stopwatchStart")) || 0;
-      stopwatchElapsed = parseFloat(localStorage.getItem("stopwatchElapsed")) || 0;
+      if (savedState && savedStart) {
+        mode = savedMode;
+        paused = savedPaused === 'true';
+        pauseTime = parseInt(savedPauseTime);
+        startTime = parseInt(savedStart);
 
-      if (isRunning) runTimer();
-      else updateDisplay();
-    }
-
-    function startTimer() {
-      let sec = parseTime(document.getElementById("timeInput").value);
-      if (!sec) return;
-      isTimerMode = true;
-      startTime = Date.now();
-      endTime = startTime + sec * 1000;
-      isRunning = true;
-      isPaused = false;
-      pausedAt = 0;
-      acquireWakeLock();
-      runTimer();
-      saveState();
-    }
-
-    function runTimer() {
-      clearInterval(timerInterval);
-      timerInterval = setInterval(() => {
-        let now = Date.now();
-        let remaining;
-
-        if (isPaused) {
-          remaining = pausedAt;
-        } else if (isTimerMode) {
-          remaining = Math.max(0, Math.floor((endTime - now) / 1000));
-        } else {
-          stopwatchElapsed = Math.floor((now - stopwatchStart) / 1000);
-          remaining = stopwatchElapsed;
-        }
-
-        let min = String(Math.floor(remaining / 60)).padStart(2, '0');
-        let sec = String(remaining % 60).padStart(2, '0');
-        document.getElementById("time").textContent = `${min}:${sec}`;
-        document.getElementById("arrow").textContent = isTimerMode ? "⬇️" : "⬆️";
-        document.getElementById("statusIcon").textContent = isRunning && !isPaused ? "▶️" : "⏸";
-
-        if (isTimerMode && remaining === 0 && !isPaused) {
-          isTimerMode = false;
-          stopwatchStart = Date.now();
-          stopwatchElapsed = 0;
-          saveState();
-        }
-
-        if (!isTimerMode && remaining >= 300) {
-          document.body.classList.add("whiteout");
-        }
-
-        saveState();
-      }, 250);
-    }
-
-    function togglePause() {
-      if (!isRunning) return;
-      if (isPaused) {
-        let now = Date.now();
-        if (isTimerMode) {
-          endTime = now + pausedAt * 1000;
-        } else {
-          stopwatchStart = now - pausedAt * 1000;
-        }
-        isPaused = false;
-      } else {
-        if (isTimerMode) {
-          pausedAt = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
-        } else {
-          pausedAt = Math.floor((Date.now() - stopwatchStart) / 1000);
-        }
-        isPaused = true;
+        if (!paused) startTimer();
+        else updateDisplay();
       }
-      runTimer();
-      saveState();
-    }
+    });
 
-    async function acquireWakeLock() {
-      try {
-        if ('wakeLock' in navigator) {
-          wakeLock = await navigator.wakeLock.request('screen');
-        }
-      } catch (err) {
-        console.error(`Wake Lock error: ${err.name}, ${err.message}`);
-      }
-    }
-
-    window.addEventListener("load", loadState);
-    window.addEventListener("beforeunload", saveState);
     document.addEventListener("keydown", e => {
       if (e.code === "Space") {
         e.preventDefault();
         togglePause();
       }
     });
+
+    function start() {
+      const input = document.getElementById("timeInput").value;
+      if (!input) return;
+
+      localStorage.setItem("inputTime", input);
+
+      let seconds = parseInt(input);
+      if (seconds < 100) {
+        seconds = seconds;
+      } else if (seconds < 10000) {
+        seconds = Math.floor(seconds / 100) * 60 + (seconds % 100);
+      } else return;
+
+      startTime = Date.now();
+      endTime = startTime + seconds * 1000;
+      paused = false;
+      mode = 'timer';
+      localStorage.setItem("timerState", 'running');
+      localStorage.setItem("startTime", startTime);
+      localStorage.setItem("mode", mode);
+      localStorage.setItem("paused", paused);
+      localStorage.removeItem("pauseTime");
+      startTimer();
+    }
+
+    function startTimer() {
+      clearInterval(interval);
+      interval = setInterval(updateDisplay, 100);
+    }
+
+    function togglePause() {
+      if (!startTime) return;
+
+      paused = !paused;
+      localStorage.setItem("paused", paused);
+      if (paused) {
+        pauseTime = Date.now();
+        localStorage.setItem("pauseTime", pauseTime);
+        clearInterval(interval);
+      } else {
+        const pauseDuration = Date.now() - pauseTime;
+        startTime += pauseDuration;
+        if (mode === 'timer') endTime += pauseDuration;
+        localStorage.setItem("startTime", startTime);
+        startTimer();
+      }
+    }
+
+    function updateDisplay() {
+      const now = Date.now();
+      let diff;
+
+      if (paused) {
+        if (mode === 'timer') {
+          diff = Math.max(0, endTime - pauseTime);
+        } else {
+          diff = pauseTime - stopwatchStartTime;
+        }
+      } else {
+        if (mode === 'timer') {
+          diff = Math.max(0, endTime - now);
+          if (diff <= 0) {
+            mode = 'stopwatch';
+            stopwatchStartTime = Date.now();
+            localStorage.setItem("mode", mode);
+          }
+        } else {
+          diff = now - stopwatchStartTime;
+        }
+      }
+
+      const min = Math.floor(diff / 60000).toString().padStart(2, '0');
+      const sec = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+      document.getElementById("display").textContent = `${min}:${sec}`;
+
+      if (mode === 'timer') {
+        document.getElementById("statusMark").textContent = paused ? "⏸️" : "▼";
+      } else {
+        document.getElementById("statusMark").textContent = paused ? "⏸️" : "▲";
+        if (!paused && diff > 5 * 60 * 1000) document.body.style.backgroundColor = "#ffffff";
+      }
+    }
+
+    if ('wakeLock' in navigator) {
+      let wakeLock = null;
+      const requestWakeLock = async () => {
+        try {
+          wakeLock = await navigator.wakeLock.request('screen');
+        } catch (err) { }
+      };
+      requestWakeLock();
+    }
   </script>
 </body>
+
 </html>
