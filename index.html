@@ -30,60 +30,134 @@
       font-size: 3rem;
       margin-top: 20px;
     }
+    .arrow {
+      font-size: 2rem;
+      margin-right: 10px;
+    }
   </style>
 </head>
 <body>
   <h1>タイマー & ストップウォッチ</h1>
   <input type="text" id="timeInput" placeholder="例：0907 (9分7秒)" maxlength="4">
   <button onclick="startTimer()">スタート</button>
-  <div id="display">--:--</div>
+  <button onclick="togglePause()">一時停止 / 再開</button>
+  <div id="display"><span class="arrow" id="arrow">⬇️</span>--:--</div>
 
   <script>
     let timerId;
     let stopwatchId;
     let stopwatchSeconds = 0;
+    let remainingSeconds = 0;
+    let paused = false;
+    let mode = 'timer'; // 'timer' or 'stopwatch'
+    let wakeLock = null;
+
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+        }
+      } catch (err) {
+        console.error('Wake Lock failed:', err);
+      }
+    }
+
+    function saveState() {
+      const state = {
+        mode,
+        remainingSeconds,
+        stopwatchSeconds,
+        paused
+      };
+      localStorage.setItem('timerState', JSON.stringify(state));
+    }
+
+    function loadState() {
+      const saved = localStorage.getItem('timerState');
+      if (saved) {
+        const state = JSON.parse(saved);
+        mode = state.mode;
+        remainingSeconds = state.remainingSeconds;
+        stopwatchSeconds = state.stopwatchSeconds;
+        paused = state.paused;
+
+        if (mode === 'timer' && remainingSeconds > 0) {
+          resumeTimer();
+        } else if (mode === 'stopwatch') {
+          startStopwatch();
+        }
+      }
+    }
 
     function startTimer() {
       clearInterval(timerId);
       clearInterval(stopwatchId);
       document.body.style.backgroundColor = '#121212';
       stopwatchSeconds = 0;
-
+      paused = false;
+      mode = 'timer';
+      document.getElementById('arrow').textContent = '⬇️';
+      
       const input = document.getElementById('timeInput').value;
       const minutes = parseInt(input.slice(0, 2));
       const seconds = parseInt(input.slice(2, 4));
-      let totalSeconds = minutes * 60 + seconds;
+      remainingSeconds = minutes * 60 + seconds;
 
+      requestWakeLock();
+      runTimer();
+    }
+
+    function runTimer() {
       const display = document.getElementById('display');
-      
       timerId = setInterval(() => {
-        if (totalSeconds <= 0) {
+        if (paused) return;
+
+        if (remainingSeconds <= 0) {
           clearInterval(timerId);
           startStopwatch();
           return;
         }
 
-        const m = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
-        const s = String(totalSeconds % 60).padStart(2, '0');
-        display.textContent = `${m}:${s}`;
-        totalSeconds--;
+        const m = String(Math.floor(remainingSeconds / 60)).padStart(2, '0');
+        const s = String(remainingSeconds % 60).padStart(2, '0');
+        display.innerHTML = `<span class="arrow" id="arrow">⬇️</span>${m}:${s}`;
+        remainingSeconds--;
+        saveState();
       }, 1000);
     }
 
+    function resumeTimer() {
+      requestWakeLock();
+      runTimer();
+    }
+
     function startStopwatch() {
+      clearInterval(timerId);
+      mode = 'stopwatch';
+      document.getElementById('arrow').textContent = '⬆️';
       const display = document.getElementById('display');
       stopwatchId = setInterval(() => {
+        if (paused) return;
+
         stopwatchSeconds++;
         const m = String(Math.floor(stopwatchSeconds / 60)).padStart(2, '0');
         const s = String(stopwatchSeconds % 60).padStart(2, '0');
-        display.textContent = `${m}:${s}`;
+        display.innerHTML = `<span class="arrow" id="arrow">⬆️</span>${m}:${s}`;
 
         if (stopwatchSeconds >= 300) {
           document.body.style.backgroundColor = '#ffffff';
           display.style.color = '#000000';
         }
+        saveState();
       }, 1000);
     }
+
+    function togglePause() {
+      paused = !paused;
+      saveState();
+    }
+
+    loadState();
   </script>
 </body>
 </html>
