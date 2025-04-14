@@ -1,194 +1,209 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Timer & Stopwatch</title>
-  <link rel="icon" href="icon.png">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>タイマー＋ストップウォッチ</title>
+  <link rel="icon" href="icon.png" />
   <style>
     body {
-      margin: 0;
       background-color: #121212;
-      color: white;
+      color: #ffffff;
       font-family: sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       height: 100vh;
+      margin: 0;
     }
     input {
-      font-size: 2em;
+      font-size: 2rem;
       text-align: center;
-      width: 6em;
-      margin-bottom: 1em;
+      background: #333;
+      color: #fff;
+      border: none;
+      padding: 0.5rem;
+      border-radius: 5px;
+      margin: 1rem;
     }
-    #display {
-      font-size: 3em;
-      margin: 0.5em;
+    #timeDisplay {
+      font-size: 4rem;
+      margin: 1rem;
     }
     button {
-      font-size: 1.5em;
-      margin: 0.5em;
-    }
-    #indicator {
-      font-size: 2em;
-      margin-right: 0.5em;
-    }
-    .whiteout {
-      background-color: white;
-      color: black;
+      font-size: 1.5rem;
+      margin: 0.5rem;
+      padding: 0.5rem 1rem;
+      background-color: #444;
+      color: white;
+      border: none;
+      border-radius: 5px;
     }
   </style>
 </head>
 <body>
   <div>
-    <span id="state-icon">⏸️</span>
-    <span id="indicator">⬇️</span>
-    <span id="display">00:00</span>
+    <span id="modeIcon">▶️</span>
+    <span id="arrow">⬇️</span>
+    <span id="timeDisplay">00:00</span>
   </div>
-  <input id="timeInput" placeholder="0907">
+  <input id="timeInput" type="text" placeholder="0907のように入力" />
   <div>
     <button id="startBtn">スタート</button>
     <button id="pauseBtn">一時停止</button>
   </div>
 
   <script>
-    const display = document.getElementById("display");
-    const timeInput = document.getElementById("timeInput");
-    const startBtn = document.getElementById("startBtn");
-    const pauseBtn = document.getElementById("pauseBtn");
-    const indicator = document.getElementById("indicator");
-    const stateIcon = document.getElementById("state-icon");
+    const timeDisplay = document.getElementById('timeDisplay');
+    const timeInput = document.getElementById('timeInput');
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const arrow = document.getElementById('arrow');
+    const modeIcon = document.getElementById('modeIcon');
 
-    let isRunning = false;
-    let isPaused = false;
-    let mode = "timer"; // or "stopwatch"
-    let targetTime = 0;
-    let baseTime = 0;
-    let pausedAt = null;
-    let interval;
+    let mode = localStorage.getItem('mode') || 'timer'; // 'timer' or 'stopwatch'
+    let isRunning = localStorage.getItem('isRunning') === 'true';
+    let startTime = parseInt(localStorage.getItem('startTime') || '0');
+    let duration = parseInt(localStorage.getItem('duration') || '0');
+    let pausedTime = parseInt(localStorage.getItem('pausedTime') || '0');
+    let wakeLock = null;
 
-    if ('wakeLock' in navigator) {
-      let wakeLock = null;
-      const requestWakeLock = async () => {
-        try {
-          wakeLock = await navigator.wakeLock.request('screen');
-        } catch (err) {}
-      };
-      document.addEventListener("visibilitychange", () => {
-        if (wakeLock !== null && document.visibilityState === "visible") {
-          requestWakeLock();
-        }
-      });
-      requestWakeLock();
-    }
-
-    function saveState() {
-      localStorage.setItem("mode", mode);
-      localStorage.setItem("isRunning", isRunning);
-      localStorage.setItem("targetTime", targetTime);
-      localStorage.setItem("baseTime", baseTime);
-      localStorage.setItem("pausedAt", pausedAt);
-    }
-
-    function loadState() {
-      mode = localStorage.getItem("mode") || "timer";
-      isRunning = localStorage.getItem("isRunning") === "true";
-      targetTime = parseInt(localStorage.getItem("targetTime")) || 0;
-      baseTime = parseInt(localStorage.getItem("baseTime")) || 0;
-      pausedAt = localStorage.getItem("pausedAt");
-      if (pausedAt === "null") pausedAt = null;
-      if (isRunning && !pausedAt) {
-        startTimer();
-      } else {
-        updateDisplay();
-      }
-    }
+    timeInput.value = localStorage.getItem('inputValue') || '';
 
     function parseInput(input) {
-      const num = input.replace(/\D/g, "");
+      let num = input.replace(/\D/g, '');
       if (!num) return 0;
-      if (num.length <= 2) return parseInt(num);
-      const seconds = parseInt(num.slice(-2));
-      const minutes = parseInt(num.slice(0, -2));
-      return minutes * 60 + seconds;
+      let seconds = 0;
+      if (num.length <= 2) {
+        seconds = parseInt(num, 10);
+      } else if (num.length <= 4) {
+        let mins = parseInt(num.slice(0, -2), 10);
+        let secs = parseInt(num.slice(-2), 10);
+        seconds = mins * 60 + secs;
+      }
+      return seconds;
     }
 
-    function startTimer() {
-      clearInterval(interval);
-      baseTime = Date.now();
-      if (pausedAt) {
-        const pausedDuration = Date.now() - parseInt(pausedAt);
-        baseTime -= pausedDuration;
-        pausedAt = null;
-      }
-      isPaused = false;
-      isRunning = true;
-      if (mode === "timer") {
-        indicator.textContent = "⬇️";
-      } else {
-        indicator.textContent = "⬆️";
-      }
-      stateIcon.textContent = "▶️";
-      interval = setInterval(updateDisplay, 200);
-      saveState();
+    function formatTime(sec) {
+      const m = Math.floor(sec / 60).toString().padStart(2, '0');
+      const s = Math.floor(sec % 60).toString().padStart(2, '0');
+      return `${m}:${s}`;
     }
 
     function updateDisplay() {
       const now = Date.now();
-      let diff;
-      if (mode === "timer") {
-        diff = targetTime * 1000 - (now - baseTime);
-        if (diff <= 0) {
-          mode = "stopwatch";
-          baseTime = now;
-          indicator.textContent = "⬆️";
-          diff = 0;
+      let diff = 0;
+      if (mode === 'timer') {
+        diff = Math.max(0, duration - Math.floor((now - startTime) / 1000));
+        if (diff <= 0 && isRunning) {
+          mode = 'stopwatch';
+          startTime = now;
+          localStorage.setItem('mode', mode);
+          localStorage.setItem('startTime', startTime);
         }
       } else {
-        diff = now - baseTime;
-        if (diff >= 5 * 60 * 1000) {
-          document.body.classList.add("whiteout");
-        }
+        diff = Math.floor((now - startTime) / 1000);
       }
+      timeDisplay.textContent = formatTime(diff);
+      arrow.textContent = mode === 'timer' ? '⬇️' : '⬆️';
+      modeIcon.textContent = isRunning ? '▶️' : '⏸️';
 
-      const sec = Math.floor(diff / 1000) % 60;
-      const min = Math.floor(diff / 60000);
-      display.textContent = `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-      saveState();
+      if (mode === 'stopwatch' && diff >= 300) {
+        document.body.style.backgroundColor = '#ffffff';
+        document.body.style.color = '#000000';
+      } else {
+        document.body.style.backgroundColor = '#121212';
+        document.body.style.color = '#ffffff';
+      }
+    }
+
+    function start() {
+      if (!isRunning) {
+        if (mode === 'timer') {
+          if (!startTime || pausedTime) {
+            startTime = Date.now() - pausedTime * 1000;
+            pausedTime = 0;
+          }
+        } else {
+          startTime = Date.now() - pausedTime * 1000;
+          pausedTime = 0;
+        }
+        isRunning = true;
+        localStorage.setItem('startTime', startTime);
+        localStorage.setItem('isRunning', isRunning);
+        localStorage.setItem('pausedTime', pausedTime);
+        requestWakeLock();
+      }
     }
 
     function pause() {
-      if (!isRunning) return;
-      clearInterval(interval);
-      isPaused = true;
-      pausedAt = Date.now();
-      isRunning = false;
-      stateIcon.textContent = "⏸️";
-      saveState();
+      if (isRunning) {
+        pausedTime = Math.floor((Date.now() - startTime) / 1000);
+        isRunning = false;
+        localStorage.setItem('pausedTime', pausedTime);
+        localStorage.setItem('isRunning', isRunning);
+        releaseWakeLock();
+      }
     }
 
     startBtn.onclick = () => {
-      if (!isRunning && !pausedAt) {
-        targetTime = parseInput(timeInput.value);
-        baseTime = Date.now();
-        mode = "timer";
+      if (!isRunning) {
+        const input = timeInput.value;
+        localStorage.setItem('inputValue', input);
+        duration = parseInput(input);
+        startTime = Date.now();
+        mode = 'timer';
+        pausedTime = 0;
+        isRunning = true;
+
+        localStorage.setItem('duration', duration);
+        localStorage.setItem('startTime', startTime);
+        localStorage.setItem('mode', mode);
+        localStorage.setItem('isRunning', isRunning);
+        localStorage.setItem('pausedTime', pausedTime);
+        requestWakeLock();
       }
-      startTimer();
     };
 
-    pauseBtn.onclick = pause;
+    pauseBtn.onclick = () => {
+      if (isRunning) {
+        pause();
+      } else {
+        start();
+      }
+    };
 
-    document.addEventListener("keydown", (e) => {
-      if (e.code === "Space") {
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
         e.preventDefault();
-        if (isRunning) pause();
-        else startTimer();
+        if (isRunning) pause(); else start();
       }
     });
 
-    loadState();
+    setInterval(() => {
+      if (isRunning) updateDisplay();
+      else updateDisplay();
+    }, 500);
+
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+        }
+      } catch (err) {
+        console.error(`WakeLock error: ${err}`);
+      }
+    }
+
+    function releaseWakeLock() {
+      if (wakeLock) {
+        wakeLock.release();
+        wakeLock = null;
+      }
+    }
+
+    updateDisplay();
   </script>
 </body>
 </html>
