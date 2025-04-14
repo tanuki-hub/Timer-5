@@ -3,69 +3,108 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>タイマー & ストップウォッチ</title>
+  <title>タイマー＆ストップウォッチ</title>
   <link rel="icon" href="icon.png">
   <style>
     body {
-      margin: 0;
-      padding: 0;
       background-color: #121212;
-      color: #ffffff;
+      color: white;
       font-family: sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      transition: background-color 0.5s;
+      text-align: center;
+      padding: 2em;
+      transition: background-color 0.5s ease;
     }
-    input, button {
-      margin: 10px;
-      padding: 10px;
-      font-size: 1.5rem;
-      border-radius: 5px;
-      border: none;
+    input {
+      font-size: 2em;
+      text-align: center;
+      width: 6em;
+      margin-bottom: 1em;
     }
-    #display {
-      font-size: 3rem;
-      margin-top: 20px;
-      display: flex;
-      align-items: center;
+    .time-display {
+      font-size: 5em;
+      margin: 0.5em 0;
     }
-    .arrow, .status {
-      font-size: 2rem;
-      margin-right: 10px;
+    .status {
+      font-size: 2em;
+      margin-right: 0.5em;
+    }
+    button {
+      font-size: 1.5em;
+      margin: 0.5em;
+      padding: 0.5em 1em;
     }
   </style>
 </head>
 <body>
-  <h1>タイマー & ストップウォッチ</h1>
-  <input type="text" id="timeInput" placeholder="例：312 → 3分12秒" maxlength="4">
-  <button onclick="startTimer()">スタート</button>
-  <button onclick="togglePause()">一時停止 / 再開</button>
-  <div id="display">
-    <span class="status" id="statusIcon">⏵</span>
-    <span class="arrow" id="arrow">⬇️</span>
-    <span id="timeText">--:--</span>
+  <input id="timeInput" placeholder="1234" />
+  <div class="time-display"><span id="statusIcon">⏸</span><span id="arrow">⬇</span> <span id="timer">00:00</span></div>
+  <div>
+    <button onclick="startOrPause()" id="pauseBtn">⏸ 一時停止</button>
+    <button onclick="reset()">🔄 リセット</button>
   </div>
 
   <script>
-    let timerId;
-    let stopwatchId;
-    let stopwatchSeconds = 0;
-    let remainingSeconds = 0;
-    let paused = false;
+    let timerElement = document.getElementById('timer');
+    let arrowElement = document.getElementById('arrow');
+    let statusIcon = document.getElementById('statusIcon');
+    let pauseBtn = document.getElementById('pauseBtn');
+    let inputElement = document.getElementById('timeInput');
+
+    let interval = null;
     let mode = 'timer'; // 'timer' or 'stopwatch'
-    let wakeLock = null;
+    let remainingSeconds = 0;
+    let stopwatchSeconds = 0;
+    let isRunning = false;
+
+    const wakeLock = navigator.wakeLock;
+    let wakeLockObj = null;
 
     async function requestWakeLock() {
       try {
-        if ('wakeLock' in navigator) {
-          wakeLock = await navigator.wakeLock.request('screen');
+        if (wakeLock) {
+          wakeLockObj = await wakeLock.request('screen');
         }
       } catch (err) {
-        console.error('Wake Lock failed:', err);
+        console.error('WakeLock error:', err);
       }
+    }
+
+    function releaseWakeLock() {
+      if (wakeLockObj) {
+        wakeLockObj.release();
+        wakeLockObj = null;
+      }
+    }
+
+    function parseInput(value) {
+      if (!/^[0-9]+$/.test(value)) return 0;
+      let num = parseInt(value);
+      let seconds = 0;
+      if (value.length <= 2) {
+        seconds = num;
+      } else {
+        let sec = num % 100;
+        let min = Math.floor(num / 100);
+        seconds = min * 60 + sec;
+      }
+      return seconds;
+    }
+
+    function formatTime(sec) {
+      const m = String(Math.floor(sec / 60)).padStart(2, '0');
+      const s = String(sec % 60).padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    function updateDisplay() {
+      if (mode === 'timer') {
+        timerElement.textContent = formatTime(remainingSeconds);
+        arrowElement.textContent = '⬇';
+      } else {
+        timerElement.textContent = formatTime(stopwatchSeconds);
+        arrowElement.textContent = '⬆';
+      }
+      statusIcon.textContent = isRunning ? '⏵' : '⏸';
     }
 
     function saveState() {
@@ -73,116 +112,97 @@
         mode,
         remainingSeconds,
         stopwatchSeconds,
-        paused
+        isRunning,
+        lastUpdated: Date.now()
       };
-      localStorage.setItem('timerState', JSON.stringify(state));
+      localStorage.setItem('timerAppState', JSON.stringify(state));
     }
 
     function loadState() {
-      const saved = localStorage.getItem('timerState');
-      if (saved) {
-        const state = JSON.parse(saved);
+      const raw = localStorage.getItem('timerAppState');
+      if (!raw) return;
+      try {
+        const state = JSON.parse(raw);
         mode = state.mode;
         remainingSeconds = state.remainingSeconds;
         stopwatchSeconds = state.stopwatchSeconds;
-        paused = state.paused;
-
-        if (mode === 'timer' && remainingSeconds > 0) {
-          resumeTimer();
-        } else if (mode === 'stopwatch') {
-          startStopwatch();
+        isRunning = state.isRunning;
+        const delta = Math.floor((Date.now() - state.lastUpdated) / 1000);
+        if (isRunning) {
+          if (mode === 'timer') {
+            remainingSeconds -= delta;
+            if (remainingSeconds <= 0) {
+              mode = 'stopwatch';
+              stopwatchSeconds = -remainingSeconds;
+              remainingSeconds = 0;
+            }
+          } else {
+            stopwatchSeconds += delta;
+          }
         }
-      }
+        updateDisplay();
+        if (isRunning) {
+          run();
+          requestWakeLock();
+        }
+      } catch {}
     }
 
-    function parseTimeInput(input) {
-      const digits = input.replace(/\D/g, '');
-      if (digits.length <= 2) {
-        return parseInt(digits, 10);
+    function run() {
+      clearInterval(interval);
+      interval = setInterval(() => {
+        if (!isRunning) return;
+        if (mode === 'timer') {
+          remainingSeconds--;
+          if (remainingSeconds <= 0) {
+            mode = 'stopwatch';
+            stopwatchSeconds = 0;
+            remainingSeconds = 0;
+          }
+        } else {
+          stopwatchSeconds++;
+          if (stopwatchSeconds >= 300) {
+            document.body.style.backgroundColor = 'white';
+            document.body.style.color = 'black';
+          }
+        }
+        updateDisplay();
+        saveState();
+      }, 1000);
+    }
+
+    function startOrPause() {
+      isRunning = !isRunning;
+      if (isRunning) {
+        run();
+        requestWakeLock();
       } else {
-        const sec = parseInt(digits.slice(-2), 10);
-        const min = parseInt(digits.slice(0, -2), 10);
-        return min * 60 + sec;
+        clearInterval(interval);
+        releaseWakeLock();
       }
-    }
-
-    function updateStatusIcon() {
-      document.getElementById('statusIcon').textContent = paused ? '⏸' : '⏵';
-    }
-
-    function startTimer() {
-      clearInterval(timerId);
-      clearInterval(stopwatchId);
-      document.body.style.backgroundColor = '#121212';
-      stopwatchSeconds = 0;
-      paused = false;
-      mode = 'timer';
-      document.getElementById('arrow').textContent = '⬇️';
-      updateStatusIcon();
-
-      const input = document.getElementById('timeInput').value;
-      remainingSeconds = parseTimeInput(input);
-
-      requestWakeLock();
-      runTimer();
-    }
-
-    function runTimer() {
-      const timeText = document.getElementById('timeText');
-      timerId = setInterval(() => {
-        if (paused) return;
-
-        if (remainingSeconds <= 0) {
-          clearInterval(timerId);
-          startStopwatch();
-          return;
-        }
-
-        const m = String(Math.floor(remainingSeconds / 60)).padStart(2, '0');
-        const s = String(remainingSeconds % 60).padStart(2, '0');
-        timeText.textContent = `${m}:${s}`;
-        remainingSeconds--;
-        saveState();
-      }, 1000);
-    }
-
-    function resumeTimer() {
-      requestWakeLock();
-      runTimer();
-    }
-
-    function startStopwatch() {
-      clearInterval(timerId);
-      mode = 'stopwatch';
-      document.getElementById('arrow').textContent = '⬆️';
-      updateStatusIcon();
-      const timeText = document.getElementById('timeText');
-      stopwatchId = setInterval(() => {
-        if (paused) return;
-
-        stopwatchSeconds++;
-        const m = String(Math.floor(stopwatchSeconds / 60)).padStart(2, '0');
-        const s = String(stopwatchSeconds % 60).padStart(2, '0');
-        timeText.textContent = `${m}:${s}`;
-
-        if (stopwatchSeconds >= 300) {
-          document.body.style.backgroundColor = '#ffffff';
-          document.getElementById('timeText').style.color = '#000000';
-        }
-        saveState();
-      }, 1000);
-    }
-
-    function togglePause() {
-      paused = !paused;
-      updateStatusIcon();
+      updateDisplay();
       saveState();
     }
 
-    document.addEventListener('keydown', function (e) {
+    function reset() {
+      clearInterval(interval);
+      releaseWakeLock();
+      document.body.style.backgroundColor = '#121212';
+      document.body.style.color = 'white';
+      remainingSeconds = parseInput(inputElement.value);
+      stopwatchSeconds = 0;
+      mode = 'timer';
+      isRunning = true;
+      run();
+      requestWakeLock();
+      updateDisplay();
+      saveState();
+    }
+
+    document.addEventListener('keydown', (e) => {
       if (e.code === 'Space') {
         e.preventDefault();
-        togglePause();
+        startOrPause();
       }
     });
 
