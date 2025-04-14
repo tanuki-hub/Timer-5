@@ -1,209 +1,171 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>タイマー＋ストップウォッチ</title>
-  <link rel="icon" href="icon.png" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>タイマーとストップウォッチ</title>
+  <link rel="icon" href="icon.png">
   <style>
     body {
       background-color: #121212;
-      color: #ffffff;
+      color: white;
       font-family: sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       height: 100vh;
-      margin: 0;
     }
     input {
-      font-size: 2rem;
+      font-size: 2em;
       text-align: center;
-      background: #333;
-      color: #fff;
-      border: none;
-      padding: 0.5rem;
-      border-radius: 5px;
-      margin: 1rem;
+      width: 6em;
+      margin-bottom: 1em;
     }
-    #timeDisplay {
-      font-size: 4rem;
-      margin: 1rem;
+    .display {
+      font-size: 4em;
+      margin: 20px;
+      display: flex;
+      align-items: center;
+    }
+    .icon {
+      margin-right: 10px;
     }
     button {
-      font-size: 1.5rem;
-      margin: 0.5rem;
-      padding: 0.5rem 1rem;
-      background-color: #444;
-      color: white;
-      border: none;
-      border-radius: 5px;
+      font-size: 1.5em;
+      margin: 5px;
     }
   </style>
 </head>
+
 <body>
-  <div>
-    <span id="modeIcon">▶️</span>
-    <span id="arrow">⬇️</span>
+  <input type="text" id="timeInput" placeholder="0907">
+  <div class="display">
+    <span class="icon" id="stateIcon">▶</span>
     <span id="timeDisplay">00:00</span>
   </div>
-  <input id="timeInput" type="text" placeholder="0907のように入力" />
   <div>
-    <button id="startBtn">スタート</button>
-    <button id="pauseBtn">一時停止</button>
+    <button onclick="start()">スタート</button>
+    <button onclick="pause()">一時停止</button>
   </div>
 
   <script>
-    const timeDisplay = document.getElementById('timeDisplay');
-    const timeInput = document.getElementById('timeInput');
-    const startBtn = document.getElementById('startBtn');
-    const pauseBtn = document.getElementById('pauseBtn');
-    const arrow = document.getElementById('arrow');
-    const modeIcon = document.getElementById('modeIcon');
+    let timerStart = null;
+    let stopwatchStart = null;
+    let pauseTime = null;
+    let duration = 0;
+    let paused = false;
+    let inTimer = true;
+    let interval;
 
-    let mode = localStorage.getItem('mode') || 'timer'; // 'timer' or 'stopwatch'
-    let isRunning = localStorage.getItem('isRunning') === 'true';
-    let startTime = parseInt(localStorage.getItem('startTime') || '0');
-    let duration = parseInt(localStorage.getItem('duration') || '0');
-    let pausedTime = parseInt(localStorage.getItem('pausedTime') || '0');
-    let wakeLock = null;
-
-    timeInput.value = localStorage.getItem('inputValue') || '';
+    document.getElementById("timeInput").value = localStorage.getItem("savedInput") || "";
 
     function parseInput(input) {
-      let num = input.replace(/\D/g, '');
-      if (!num) return 0;
-      let seconds = 0;
-      if (num.length <= 2) {
-        seconds = parseInt(num, 10);
-      } else if (num.length <= 4) {
-        let mins = parseInt(num.slice(0, -2), 10);
-        let secs = parseInt(num.slice(-2), 10);
-        seconds = mins * 60 + secs;
-      }
-      return seconds;
-    }
-
-    function formatTime(sec) {
-      const m = Math.floor(sec / 60).toString().padStart(2, '0');
-      const s = Math.floor(sec % 60).toString().padStart(2, '0');
-      return `${m}:${s}`;
-    }
-
-    function updateDisplay() {
-      const now = Date.now();
-      let diff = 0;
-      if (mode === 'timer') {
-        diff = Math.max(0, duration - Math.floor((now - startTime) / 1000));
-        if (diff <= 0 && isRunning) {
-          mode = 'stopwatch';
-          startTime = now;
-          localStorage.setItem('mode', mode);
-          localStorage.setItem('startTime', startTime);
-        }
-      } else {
-        diff = Math.floor((now - startTime) / 1000);
-      }
-      timeDisplay.textContent = formatTime(diff);
-      arrow.textContent = mode === 'timer' ? '⬇️' : '⬆️';
-      modeIcon.textContent = isRunning ? '▶️' : '⏸️';
-
-      if (mode === 'stopwatch' && diff >= 300) {
-        document.body.style.backgroundColor = '#ffffff';
-        document.body.style.color = '#000000';
-      } else {
-        document.body.style.backgroundColor = '#121212';
-        document.body.style.color = '#ffffff';
-      }
+      const num = parseInt(input, 10);
+      if (isNaN(num)) return 0;
+      const str = num.toString();
+      if (str.length <= 2) return num;
+      const sec = parseInt(str.slice(-2));
+      const min = parseInt(str.slice(0, -2));
+      return min * 60 + sec;
     }
 
     function start() {
-      if (!isRunning) {
-        if (mode === 'timer') {
-          if (!startTime || pausedTime) {
-            startTime = Date.now() - pausedTime * 1000;
-            pausedTime = 0;
-          }
-        } else {
-          startTime = Date.now() - pausedTime * 1000;
-          pausedTime = 0;
-        }
-        isRunning = true;
-        localStorage.setItem('startTime', startTime);
-        localStorage.setItem('isRunning', isRunning);
-        localStorage.setItem('pausedTime', pausedTime);
-        requestWakeLock();
+      const input = document.getElementById("timeInput").value;
+      localStorage.setItem("savedInput", input);
+      if (!paused) {
+        duration = parseInput(input);
+        timerStart = Date.now();
+        inTimer = true;
+      } else {
+        // resume
+        if (inTimer) timerStart += Date.now() - pauseTime;
+        else stopwatchStart += Date.now() - pauseTime;
       }
+      paused = false;
+      startWakeLock();
+      clearInterval(interval);
+      interval = setInterval(updateTime, 100);
     }
 
     function pause() {
-      if (isRunning) {
-        pausedTime = Math.floor((Date.now() - startTime) / 1000);
-        isRunning = false;
-        localStorage.setItem('pausedTime', pausedTime);
-        localStorage.setItem('isRunning', isRunning);
-        releaseWakeLock();
+      if (!paused) {
+        pauseTime = Date.now();
+        paused = true;
+        clearInterval(interval);
+        stopWakeLock();
+        document.getElementById("stateIcon").textContent = "⏸";
       }
     }
 
-    startBtn.onclick = () => {
-      if (!isRunning) {
-        const input = timeInput.value;
-        localStorage.setItem('inputValue', input);
-        duration = parseInput(input);
-        startTime = Date.now();
-        mode = 'timer';
-        pausedTime = 0;
-        isRunning = true;
+    function updateTime() {
+      let display = document.getElementById("timeDisplay");
+      let icon = document.getElementById("stateIcon");
 
-        localStorage.setItem('duration', duration);
-        localStorage.setItem('startTime', startTime);
-        localStorage.setItem('mode', mode);
-        localStorage.setItem('isRunning', isRunning);
-        localStorage.setItem('pausedTime', pausedTime);
-        requestWakeLock();
+      if (inTimer) {
+        let elapsed = (Date.now() - timerStart) / 1000;
+        let remaining = duration - elapsed;
+        if (remaining <= 0) {
+          inTimer = false;
+          stopwatchStart = Date.now();
+          icon.textContent = "▲";
+        } else {
+          icon.textContent = "▼";
+          display.textContent = formatTime(remaining);
+          document.body.style.backgroundColor = "#121212";
+          return;
+        }
       }
-    };
 
-    pauseBtn.onclick = () => {
-      if (isRunning) {
-        pause();
-      } else {
-        start();
+      let swElapsed = (Date.now() - stopwatchStart) / 1000;
+      display.textContent = formatTime(swElapsed);
+      icon.textContent = "▲";
+
+      if (swElapsed >= 300) {
+        document.body.style.backgroundColor = "#ffffff";
+        document.body.style.color = "#000000";
       }
-    };
+    }
 
-    document.addEventListener('keydown', (e) => {
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+
+    // スペースキーで一時停止/再開
+    document.addEventListener('keydown', e => {
       if (e.code === 'Space') {
         e.preventDefault();
-        if (isRunning) pause(); else start();
+        if (paused) start(); else pause();
       }
     });
 
-    setInterval(() => {
-      if (isRunning) updateDisplay();
-      else updateDisplay();
-    }, 500);
-
-    async function requestWakeLock() {
+    // 実時間を使うために wake lock の管理
+    let wakeLock = null;
+    async function startWakeLock() {
       try {
         if ('wakeLock' in navigator) {
           wakeLock = await navigator.wakeLock.request('screen');
         }
       } catch (err) {
-        console.error(`WakeLock error: ${err}`);
+        console.error('WakeLock failed:', err);
       }
     }
-
-    function releaseWakeLock() {
+    function stopWakeLock() {
       if (wakeLock) {
         wakeLock.release();
         wakeLock = null;
       }
     }
 
-    updateDisplay();
+    // ページ読み込み時に再表示
+    window.onload = () => {
+      const savedInput = localStorage.getItem("savedInput") || "";
+      document.getElementById("timeInput").value = savedInput;
+    };
   </script>
 </body>
+
 </html>
