@@ -59,8 +59,6 @@
     let inTimer = true;
     let interval;
 
-    document.getElementById("timeInput").value = localStorage.getItem("savedInput") || "";
-
     function parseInput(input) {
       const num = parseInt(input, 10);
       if (isNaN(num)) return 0;
@@ -73,13 +71,11 @@
 
     function start() {
       const input = document.getElementById("timeInput").value;
-      localStorage.setItem("savedInput", input);
       if (!paused) {
         duration = parseInput(input);
         timerStart = Date.now();
         inTimer = true;
       } else {
-        // resume
         if (inTimer) timerStart += Date.now() - pauseTime;
         else stopwatchStart += Date.now() - pauseTime;
       }
@@ -114,6 +110,7 @@
           icon.textContent = "▼";
           display.textContent = formatTime(remaining);
           document.body.style.backgroundColor = "#121212";
+          document.body.style.color = "#ffffff";
           return;
         }
       }
@@ -134,7 +131,6 @@
       return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
 
-    // スペースキーで一時停止/再開
     document.addEventListener('keydown', e => {
       if (e.code === 'Space') {
         e.preventDefault();
@@ -142,7 +138,6 @@
       }
     });
 
-    // 実時間を使うために wake lock の管理
     let wakeLock = null;
     async function startWakeLock() {
       try {
@@ -159,12 +154,6 @@
         wakeLock = null;
       }
     }
-
-    // ページ読み込み時に再表示
-    window.onload = () => {
-      const savedInput = localStorage.getItem("savedInput") || "";
-      document.getElementById("timeInput").value = savedInput;
-    };
   </script>
 </body>
 
