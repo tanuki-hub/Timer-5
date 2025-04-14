@@ -29,8 +29,10 @@
     #display {
       font-size: 3rem;
       margin-top: 20px;
+      display: flex;
+      align-items: center;
     }
-    .arrow {
+    .arrow, .status {
       font-size: 2rem;
       margin-right: 10px;
     }
@@ -41,7 +43,11 @@
   <input type="text" id="timeInput" placeholder="例：312 → 3分12秒" maxlength="4">
   <button onclick="startTimer()">スタート</button>
   <button onclick="togglePause()">一時停止 / 再開</button>
-  <div id="display"><span class="arrow" id="arrow">⬇️</span>--:--</div>
+  <div id="display">
+    <span class="status" id="statusIcon">⏵</span>
+    <span class="arrow" id="arrow">⬇️</span>
+    <span id="timeText">--:--</span>
+  </div>
 
   <script>
     let timerId;
@@ -100,6 +106,10 @@
       }
     }
 
+    function updateStatusIcon() {
+      document.getElementById('statusIcon').textContent = paused ? '⏸' : '⏵';
+    }
+
     function startTimer() {
       clearInterval(timerId);
       clearInterval(stopwatchId);
@@ -108,7 +118,8 @@
       paused = false;
       mode = 'timer';
       document.getElementById('arrow').textContent = '⬇️';
-      
+      updateStatusIcon();
+
       const input = document.getElementById('timeInput').value;
       remainingSeconds = parseTimeInput(input);
 
@@ -117,7 +128,7 @@
     }
 
     function runTimer() {
-      const display = document.getElementById('display');
+      const timeText = document.getElementById('timeText');
       timerId = setInterval(() => {
         if (paused) return;
 
@@ -129,7 +140,7 @@
 
         const m = String(Math.floor(remainingSeconds / 60)).padStart(2, '0');
         const s = String(remainingSeconds % 60).padStart(2, '0');
-        display.innerHTML = `<span class="arrow" id="arrow">⬇️</span>${m}:${s}`;
+        timeText.textContent = `${m}:${s}`;
         remainingSeconds--;
         saveState();
       }, 1000);
@@ -144,18 +155,19 @@
       clearInterval(timerId);
       mode = 'stopwatch';
       document.getElementById('arrow').textContent = '⬆️';
-      const display = document.getElementById('display');
+      updateStatusIcon();
+      const timeText = document.getElementById('timeText');
       stopwatchId = setInterval(() => {
         if (paused) return;
 
         stopwatchSeconds++;
         const m = String(Math.floor(stopwatchSeconds / 60)).padStart(2, '0');
         const s = String(stopwatchSeconds % 60).padStart(2, '0');
-        display.innerHTML = `<span class="arrow" id="arrow">⬆️</span>${m}:${s}`;
+        timeText.textContent = `${m}:${s}`;
 
         if (stopwatchSeconds >= 300) {
           document.body.style.backgroundColor = '#ffffff';
-          display.style.color = '#000000';
+          document.getElementById('timeText').style.color = '#000000';
         }
         saveState();
       }, 1000);
@@ -163,8 +175,16 @@
 
     function togglePause() {
       paused = !paused;
+      updateStatusIcon();
       saveState();
     }
+
+    document.addEventListener('keydown', function (e) {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        togglePause();
+      }
+    });
 
     loadState();
   </script>
