@@ -69,30 +69,10 @@
       return min * 60 + sec;
     }
 
-    function start() {
-      const input = document.getElementById("timeInput").value;
-      if (!paused) {
-        duration = parseInput(input);
-        timerStart = Date.now();
-        inTimer = true;
-      } else {
-        if (inTimer) timerStart += Date.now() - pauseTime;
-        else stopwatchStart += Date.now() - pauseTime;
-      }
-      paused = false;
-      startWakeLock();
-      clearInterval(interval);
-      interval = setInterval(updateTime, 100);
-    }
-
-    function pause() {
-      if (!paused) {
-        pauseTime = Date.now();
-        paused = true;
-        clearInterval(interval);
-        stopWakeLock();
-        document.getElementById("stateIcon").textContent = "⏸";
-      }
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = Math.floor(seconds % 60);
+      return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
 
     function updateTime() {
@@ -105,6 +85,8 @@
         if (remaining <= 0) {
           inTimer = false;
           stopwatchStart = Date.now();
+          localStorage.setItem("stopwatchStart", stopwatchStart);
+          localStorage.setItem("inTimer", "false");
           icon.textContent = "▲";
         } else {
           icon.textContent = "▼";
@@ -125,10 +107,41 @@
       }
     }
 
-    function formatTime(seconds) {
-      const m = Math.floor(seconds / 60);
-      const s = Math.floor(seconds % 60);
-      return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    function start() {
+      const input = document.getElementById("timeInput").value;
+      localStorage.setItem("timeInput", input);
+      if (!paused) {
+        duration = parseInput(input);
+        timerStart = Date.now();
+        localStorage.setItem("timerStart", timerStart);
+        localStorage.setItem("duration", duration);
+        inTimer = true;
+        localStorage.setItem("inTimer", "true");
+      } else {
+        if (inTimer) {
+          timerStart += Date.now() - pauseTime;
+          localStorage.setItem("timerStart", timerStart);
+        } else {
+          stopwatchStart += Date.now() - pauseTime;
+          localStorage.setItem("stopwatchStart", stopwatchStart);
+        }
+      }
+      paused = false;
+      localStorage.setItem("paused", "false");
+      startWakeLock();
+      clearInterval(interval);
+      interval = setInterval(updateTime, 100);
+    }
+
+    function pause() {
+      if (!paused) {
+        pauseTime = Date.now();
+        paused = true;
+        localStorage.setItem("paused", "true");
+        clearInterval(interval);
+        stopWakeLock();
+        document.getElementById("stateIcon").textContent = "⏸";
+      }
     }
 
     document.addEventListener('keydown', e => {
@@ -152,6 +165,27 @@
       if (wakeLock) {
         wakeLock.release();
         wakeLock = null;
+      }
+    }
+
+    // 初期化: ローカルストレージから復元
+    window.onload = function () {
+      const savedInput = localStorage.getItem("timeInput");
+      if (savedInput) {
+        document.getElementById("timeInput").value = savedInput;
+      }
+
+      if (localStorage.getItem("paused") === "false") {
+        inTimer = localStorage.getItem("inTimer") === "true";
+        paused = false;
+        if (inTimer) {
+          timerStart = parseInt(localStorage.getItem("timerStart"), 10);
+          duration = parseInt(localStorage.getItem("duration"), 10);
+        } else {
+          stopwatchStart = parseInt(localStorage.getItem("stopwatchStart"), 10);
+        }
+        startWakeLock();
+        interval = setInterval(updateTime, 100);
       }
     }
   </script>
