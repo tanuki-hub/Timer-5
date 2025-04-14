@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>タイマー & ストップウォッチ</title>
+  <link rel="icon" href="icon.png">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #121212;
+      color: #ffffff;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      transition: background-color 0.5s;
+    }
+    input, button {
+      margin: 10px;
+      padding: 10px;
+      font-size: 1.5rem;
+      border-radius: 5px;
+      border: none;
+    }
+    #display {
+      font-size: 3rem;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>タイマー & ストップウォッチ</h1>
+  <input type="text" id="timeInput" placeholder="例：0907 (9分7秒)" maxlength="4">
+  <button onclick="startTimer()">スタート</button>
+  <div id="display">--:--</div>
+
+  <script>
+    let timerId;
+    let stopwatchId;
+    let stopwatchSeconds = 0;
+
+    function startTimer() {
+      clearInterval(timerId);
+      clearInterval(stopwatchId);
+      document.body.style.backgroundColor = '#121212';
+      stopwatchSeconds = 0;
+
+      const input = document.getElementById('timeInput').value;
+      const minutes = parseInt(input.slice(0, 2));
+      const seconds = parseInt(input.slice(2, 4));
+      let totalSeconds = minutes * 60 + seconds;
+
+      const display = document.getElementById('display');
+      
+      timerId = setInterval(() => {
+        if (totalSeconds <= 0) {
+          clearInterval(timerId);
+          startStopwatch();
+          return;
+        }
+
+        const m = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+        const s = String(totalSeconds % 60).padStart(2, '0');
+        display.textContent = `${m}:${s}`;
+        totalSeconds--;
+      }, 1000);
+    }
+
+    function startStopwatch() {
+      const display = document.getElementById('display');
+      stopwatchId = setInterval(() => {
+        stopwatchSeconds++;
+        const m = String(Math.floor(stopwatchSeconds / 60)).padStart(2, '0');
+        const s = String(stopwatchSeconds % 60).padStart(2, '0');
+        display.textContent = `${m}:${s}`;
+
+        if (stopwatchSeconds >= 300) {
+          document.body.style.backgroundColor = '#ffffff';
+          display.style.color = '#000000';
+        }
+      }, 1000);
+    }
+  </script>
+</body>
+</html>
