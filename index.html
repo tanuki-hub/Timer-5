@@ -38,7 +38,7 @@
 </head>
 <body>
   <h1>タイマー & ストップウォッチ</h1>
-  <input type="text" id="timeInput" placeholder="例：0907 (9分7秒)" maxlength="4">
+  <input type="text" id="timeInput" placeholder="例：312 → 3分12秒" maxlength="4">
   <button onclick="startTimer()">スタート</button>
   <button onclick="togglePause()">一時停止 / 再開</button>
   <div id="display"><span class="arrow" id="arrow">⬇️</span>--:--</div>
@@ -89,6 +89,17 @@
       }
     }
 
+    function parseTimeInput(input) {
+      const digits = input.replace(/\D/g, '');
+      if (digits.length <= 2) {
+        return parseInt(digits, 10);
+      } else {
+        const sec = parseInt(digits.slice(-2), 10);
+        const min = parseInt(digits.slice(0, -2), 10);
+        return min * 60 + sec;
+      }
+    }
+
     function startTimer() {
       clearInterval(timerId);
       clearInterval(stopwatchId);
@@ -99,9 +110,7 @@
       document.getElementById('arrow').textContent = '⬇️';
       
       const input = document.getElementById('timeInput').value;
-      const minutes = parseInt(input.slice(0, 2));
-      const seconds = parseInt(input.slice(2, 4));
-      remainingSeconds = minutes * 60 + seconds;
+      remainingSeconds = parseTimeInput(input);
 
       requestWakeLock();
       runTimer();
